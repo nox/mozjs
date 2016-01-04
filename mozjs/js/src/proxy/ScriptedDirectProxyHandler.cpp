@@ -9,18 +9,23 @@
 #include "jsapi.h"
 
 #include "jsobjinlines.h"
+#include "vm/NativeObject-inl.h"
+
+#include "vm/NativeObject-inl.h"
 
 using namespace js;
+
+using JS::IsArrayAnswer;
 using mozilla::ArrayLength;
 
 static inline bool
-IsDataDescriptor(const PropertyDescriptor &desc)
+IsDataDescriptor(const PropertyDescriptor& desc)
 {
     return desc.obj && !(desc.attrs & (JSPROP_GETTER | JSPROP_SETTER));
 }
 
 static inline bool
-IsAccessorDescriptor(const PropertyDescriptor &desc)
+IsAccessorDescriptor(const PropertyDescriptor& desc)
 {
     return desc.obj && desc.attrs & (JSPROP_GETTER | JSPROP_SETTER);
 }
@@ -29,8 +34,8 @@ IsAccessorDescriptor(const PropertyDescriptor &desc)
 // Since we are actually performing 9.1.6.2 IsCompatiblePropertyDescriptor(Extensible, Desc,
 // Current), some parameters are omitted.
 static bool
-ValidatePropertyDescriptor(JSContext *cx, bool extensible, Handle<PropertyDescriptor> desc,
-                           Handle<PropertyDescriptor> current, bool *bp)
+ValidatePropertyDescriptor(JSContext* cx, bool extensible, Handle<PropertyDescriptor> desc,
+                           Handle<PropertyDescriptor> current, bool* bp)
 {
     // step 2
     if (!current.object()) {
@@ -127,144 +132,29 @@ ValidatePropertyDescriptor(JSContext *cx, bool extensible, Handle<PropertyDescri
     return true;
 }
 
-// Aux.6 IsSealed(O, P)
-static bool
-IsSealed(JSContext* cx, HandleObject obj, HandleId id, bool *bp)
-{
-    // step 1
-    Rooted<PropertyDescriptor> desc(cx);
-    if (!GetOwnPropertyDescriptor(cx, obj, id, &desc))
-        return false;
-
-    // steps 2-3
-    *bp = desc.object() && !desc.configurable();
-    return true;
-}
-
 // Get the [[ProxyHandler]] of a scripted direct proxy.
-static JSObject *
-GetDirectProxyHandlerObject(JSObject *proxy)
+static JSObject*
+GetDirectProxyHandlerObject(JSObject* proxy)
 {
     MOZ_ASSERT(proxy->as<ProxyObject>().handler() == &ScriptedDirectProxyHandler::singleton);
     return proxy->as<ProxyObject>().extra(ScriptedDirectProxyHandler::HANDLER_EXTRA).toObjectOrNull();
 }
 
 static inline void
-ReportInvalidTrapResult(JSContext *cx, JSObject *proxy, JSAtom *atom)
+ReportInvalidTrapResult(JSContext* cx, JSObject* proxy, JSAtom* atom)
 {
     RootedValue v(cx, ObjectOrNullValue(proxy));
     JSAutoByteString bytes;
     if (!AtomToPrintableString(cx, atom, &bytes))
         return;
     ReportValueError2(cx, JSMSG_INVALID_TRAP_RESULT, JSDVG_IGNORE_STACK, v,
-                      js::NullPtr(), bytes.ptr());
-}
-
-// This function is shared between ownPropertyKeys, enumerate, and
-// getOwnEnumerablePropertyKeys.
-static bool
-ArrayToIdVector(JSContext *cx, HandleObject proxy, HandleObject target, HandleValue v,
-                AutoIdVector &props, unsigned flags, JSAtom *trapName_)
-{
-    MOZ_ASSERT(v.isObject());
-    RootedObject array(cx, &v.toObject());
-    RootedAtom trapName(cx, trapName_);
-
-    // steps g-h
-    uint32_t n;
-    if (!GetLengthProperty(cx, array, &n))
-        return false;
-
-    // steps i-k
-    for (uint32_t i = 0; i < n; ++i) {
-        // step i
-        RootedValue v(cx);
-        if (!GetElement(cx, array, array, i, &v))
-            return false;
-
-        // step ii
-        RootedId id(cx);
-        if (!ValueToId<CanGC>(cx, v, &id))
-            return false;
-
-        // step iii
-        for (uint32_t j = 0; j < i; ++j) {
-            if (props[j].get() == id) {
-                ReportInvalidTrapResult(cx, proxy, trapName);
-                return false;
-            }
-        }
-
-        // step iv
-        bool isFixed;
-        if (!HasOwnProperty(cx, target, id, &isFixed))
-            return false;
-
-        // step v
-        bool extensible;
-        if (!IsExtensible(cx, target, &extensible))
-            return false;
-        if (!extensible && !isFixed) {
-            JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_CANT_REPORT_NEW);
-            return false;
-        }
-
-        // step vi
-        if (!props.append(id))
-            return false;
-    }
-
-    // step l
-    AutoIdVector ownProps(cx);
-    if (!GetPropertyKeys(cx, target, flags, &ownProps))
-        return false;
-
-    // step m
-    for (size_t i = 0; i < ownProps.length(); ++i) {
-        RootedId id(cx, ownProps[i]);
-
-        bool found = false;
-        for (size_t j = 0; j < props.length(); ++j) {
-            if (props[j].get() == id) {
-                found = true;
-               break;
-            }
-        }
-        if (found)
-            continue;
-
-        // step i
-        bool sealed;
-        if (!IsSealed(cx, target, id, &sealed))
-            return false;
-        if (sealed) {
-            JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_CANT_SKIP_NC);
-            return false;
-        }
-
-        // step ii
-        bool isFixed;
-        if (!HasOwnProperty(cx, target, id, &isFixed))
-            return false;
-
-        // step iii
-        bool extensible;
-        if (!IsExtensible(cx, target, &extensible))
-            return false;
-        if (!extensible && isFixed) {
-            JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_CANT_REPORT_E_AS_NE);
-            return false;
-        }
-    }
-
-    // step n
-    return true;
+                      nullptr, bytes.ptr());
 }
 
 // ES6 implements both getPrototype and setPrototype traps. We don't have them yet (see bug
 // 888969). For now, use these, to account for proxy revocation.
 bool
-ScriptedDirectProxyHandler::getPrototype(JSContext *cx, HandleObject proxy,
+ScriptedDirectProxyHandler::getPrototype(JSContext* cx, HandleObject proxy,
                                          MutableHandleObject protop) const
 {
     RootedObject target(cx, proxy->as<ProxyObject>().target());
@@ -278,8 +168,8 @@ ScriptedDirectProxyHandler::getPrototype(JSContext *cx, HandleObject proxy,
 }
 
 bool
-ScriptedDirectProxyHandler::setPrototype(JSContext *cx, HandleObject proxy, HandleObject proto,
-                                         ObjectOpResult &result) const
+ScriptedDirectProxyHandler::setPrototype(JSContext* cx, HandleObject proxy, HandleObject proto,
+                                         ObjectOpResult& result) const
 {
     RootedObject target(cx, proxy->as<ProxyObject>().target());
     if (!target) {
@@ -293,8 +183,8 @@ ScriptedDirectProxyHandler::setPrototype(JSContext *cx, HandleObject proxy, Hand
 // Not yet part of ES6, but hopefully to be standards-tracked -- and needed to
 // handle revoked proxies in any event.
 bool
-ScriptedDirectProxyHandler::setImmutablePrototype(JSContext *cx, HandleObject proxy,
-                                                  bool *succeeded) const
+ScriptedDirectProxyHandler::setImmutablePrototype(JSContext* cx, HandleObject proxy,
+                                                  bool* succeeded) const
 {
     RootedObject target(cx, proxy->as<ProxyObject>().target());
     if (!target) {
@@ -307,8 +197,8 @@ ScriptedDirectProxyHandler::setImmutablePrototype(JSContext *cx, HandleObject pr
 
 // ES6 draft rev 32 (2 Feb 2015) 9.5.4 Proxy.[[PreventExtensions]]()
 bool
-ScriptedDirectProxyHandler::preventExtensions(JSContext *cx, HandleObject proxy,
-                                              ObjectOpResult &result) const
+ScriptedDirectProxyHandler::preventExtensions(JSContext* cx, HandleObject proxy,
+                                              ObjectOpResult& result) const
 {
     // Steps 1-3.
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -354,7 +244,7 @@ ScriptedDirectProxyHandler::preventExtensions(JSContext *cx, HandleObject proxy,
 
 // ES6 (5 April, 2014) 9.5.3 Proxy.[[IsExtensible]]()
 bool
-ScriptedDirectProxyHandler::isExtensible(JSContext *cx, HandleObject proxy, bool *extensible) const
+ScriptedDirectProxyHandler::isExtensible(JSContext* cx, HandleObject proxy, bool* extensible) const
 {
     // step 1
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -404,31 +294,9 @@ ScriptedDirectProxyHandler::isExtensible(JSContext *cx, HandleObject proxy, bool
     return true;
 }
 
-// Corresponds to the "standard" property descriptor getOwn/getPrototype dance. It's so explicit
-// here because ScriptedDirectProxyHandler allows script visibility for this operation.
-bool
-ScriptedDirectProxyHandler::getPropertyDescriptor(JSContext *cx, HandleObject proxy, HandleId id,
-                                                  MutableHandle<PropertyDescriptor> desc) const
-{
-    JS_CHECK_RECURSION(cx, return false);
-
-    if (!GetOwnPropertyDescriptor(cx, proxy, id, desc))
-        return false;
-    if (desc.object())
-        return true;
-    RootedObject proto(cx);
-    if (!GetPrototype(cx, proxy, &proto))
-        return false;
-    if (!proto) {
-        MOZ_ASSERT(!desc.object());
-        return true;
-    }
-    return GetPropertyDescriptor(cx, proto, id, desc);
-}
-
 // ES6 (5 April 2014) 9.5.5 Proxy.[[GetOwnProperty]](P)
 bool
-ScriptedDirectProxyHandler::getOwnPropertyDescriptor(JSContext *cx, HandleObject proxy, HandleId id,
+ScriptedDirectProxyHandler::getOwnPropertyDescriptor(JSContext* cx, HandleObject proxy, HandleId id,
                                                      MutableHandle<PropertyDescriptor> desc) const
 {
     // step 2
@@ -549,9 +417,9 @@ ScriptedDirectProxyHandler::getOwnPropertyDescriptor(JSContext *cx, HandleObject
 
 // ES6 draft rev 31 (15 Jan 2015) 9.5.6 Proxy.[[DefineOwnProperty]](P, Desc)
 bool
-ScriptedDirectProxyHandler::defineProperty(JSContext *cx, HandleObject proxy, HandleId id,
-                                           MutableHandle<PropertyDescriptor> desc,
-                                           ObjectOpResult &result) const
+ScriptedDirectProxyHandler::defineProperty(JSContext* cx, HandleObject proxy, HandleId id,
+                                           Handle<PropertyDescriptor> desc,
+                                           ObjectOpResult& result) const
 {
     // steps 2-4
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -570,11 +438,11 @@ ScriptedDirectProxyHandler::defineProperty(JSContext *cx, HandleObject proxy, Ha
 
     // step 8
     if (trap.isUndefined())
-        return StandardDefineProperty(cx, target, id, desc, result);
+        return DefineProperty(cx, target, id, desc, result);
 
     // step 9
     RootedValue descObj(cx);
-    if (!FromPropertyDescriptor(cx, desc, &descObj))
+    if (!FromPropertyDescriptorToObject(cx, desc, &descObj))
         return false;
 
     // steps 10-11
@@ -633,57 +501,187 @@ ScriptedDirectProxyHandler::defineProperty(JSContext *cx, HandleObject proxy, Ha
     return result.succeed();
 }
 
-// ES6 (5 April 2014) 9.5.12 Proxy.[[OwnPropertyKeys]]()
-bool
-ScriptedDirectProxyHandler::ownPropertyKeys(JSContext *cx, HandleObject proxy,
-                                            AutoIdVector &props) const
+// ES6 7.3.17 But elementTypes is is fixed to symbol/string.
+static bool
+CreateFilteredListFromArrayLike(JSContext* cx, HandleValue v, AutoIdVector& props)
 {
-    // step 1
+    // Step 3.
+    RootedObject obj(cx, NonNullObject(cx, v));
+    if (!obj)
+        return false;
+
+    // Steps 4-5.
+    uint32_t len;
+    if (!GetLengthProperty(cx, obj, &len))
+        return false;
+
+    // Steps 6-8.
+    RootedValue next(cx);
+    RootedId id(cx);
+    for (uint32_t index = 0; index < len; index++) {
+        if (!GetElement(cx, obj, obj, index, &next))
+            return false;
+
+        if (!next.isString() && !next.isSymbol()) {
+            JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_ONWKEYS_STR_SYM);
+            return false;
+        }
+
+        // Unobservable for strings/symbols.
+        if (!ValueToId<CanGC>(cx, next, &id))
+            return false;
+
+        if (!props.append(id))
+            return false;
+    }
+
+    // Step 9.
+    return true;
+}
+
+
+// ES6 9.5.12 Proxy.[[OwnPropertyKeys]]()
+bool
+ScriptedDirectProxyHandler::ownPropertyKeys(JSContext* cx, HandleObject proxy,
+                                            AutoIdVector& props) const
+{
+    // Step 1.
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
 
-    // step 2
+    // Step 2.
     if (!handler) {
         JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_PROXY_REVOKED);
         return false;
     }
+    // Step 3. Superfluous assertion.
 
-    // step 3
+    // Step 4.
     RootedObject target(cx, proxy->as<ProxyObject>().target());
 
-    // step 4-5
+    // Steps 5-6.
     RootedValue trap(cx);
     if (!GetProperty(cx, handler, handler, cx->names().ownKeys, &trap))
         return false;
 
-    // step 6
+    // Step 7.
     if (trap.isUndefined())
         return GetPropertyKeys(cx, target, JSITER_OWNONLY | JSITER_HIDDEN | JSITER_SYMBOLS, &props);
 
-    // step 7-8
+    // Step 8.
     Value argv[] = {
         ObjectValue(*target)
     };
-    RootedValue trapResult(cx);
-    if (!Invoke(cx, ObjectValue(*handler), trap, ArrayLength(argv), argv, &trapResult))
+    RootedValue trapResultArray(cx);
+    if (!Invoke(cx, ObjectValue(*handler), trap, ArrayLength(argv), argv, &trapResultArray))
         return false;
 
-    // step 9
-    if (trapResult.isPrimitive()) {
-        ReportInvalidTrapResult(cx, proxy, cx->names().ownKeys);
+    // Steps 9-10.
+    AutoIdVector trapResult(cx);
+    if (!CreateFilteredListFromArrayLike(cx, trapResultArray, trapResult))
         return false;
+
+    // Steps 11-12.
+    bool extensibleTarget;
+    if (!IsExtensible(cx, target, &extensibleTarget))
+        return false;
+
+    // Steps 13-14.
+    AutoIdVector targetKeys(cx);
+    if (!GetPropertyKeys(cx, target, JSITER_OWNONLY | JSITER_HIDDEN | JSITER_SYMBOLS, &targetKeys))
+        return false;
+
+    // Step 15. Superfluous assertion.
+
+    // Steps 16-17.
+    AutoIdVector targetConfigurableKeys(cx);
+    AutoIdVector targetNonconfigurableKeys(cx);
+
+    // Step 18.
+    Rooted<PropertyDescriptor> desc(cx);
+    for (size_t i = 0; i < targetKeys.length(); ++i) {
+        // Steps a-b.
+        if (!GetOwnPropertyDescriptor(cx, target, targetKeys[i], &desc))
+            return false;
+
+        // Steps c-d.
+        if (desc.object() && !desc.configurable()) {
+            if (!targetNonconfigurableKeys.append(targetKeys[i]))
+                return false;
+        } else {
+            if (!targetConfigurableKeys.append(targetKeys[i]))
+                return false;
+        }
     }
 
-    // Here we add a bunch of extra sanity checks. It is unclear if they will also appear in
-    // the spec. See step 10-11
-    return ArrayToIdVector(cx, proxy, target, trapResult, props,
-                           JSITER_OWNONLY | JSITER_HIDDEN | JSITER_SYMBOLS,
-                           cx->names().ownKeys);
+    // Step 19.
+    if (extensibleTarget && targetNonconfigurableKeys.empty())
+        return props.appendAll(trapResult);
+
+    // Step 20.
+    AutoIdVector uncheckedResultKeys(cx);
+    if (!uncheckedResultKeys.appendAll(trapResult))
+        return false;
+
+    // Step 21.
+    for (size_t i = 0; i < targetNonconfigurableKeys.length(); ++i) {
+        RootedId key(cx, targetNonconfigurableKeys[i]);
+        MOZ_ASSERT(key != JSID_VOID);
+
+        bool found = false;
+        for (size_t j = 0; j < uncheckedResultKeys.length(); ++j) {
+            if (key == uncheckedResultKeys[j]) {
+                uncheckedResultKeys[j].set(JSID_VOID);
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_CANT_SKIP_NC);
+            return false;
+        }
+    }
+
+    // Step 22.
+    if (extensibleTarget)
+        return props.appendAll(trapResult);
+
+    // Step 23.
+    for (size_t i = 0; i < targetConfigurableKeys.length(); ++i) {
+        RootedId key(cx, targetConfigurableKeys[i]);
+        MOZ_ASSERT(key != JSID_VOID);
+
+        bool found = false;
+        for (size_t j = 0; j < uncheckedResultKeys.length(); ++j) {
+            if (key == uncheckedResultKeys[j]) {
+                uncheckedResultKeys[j].set(JSID_VOID);
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_CANT_REPORT_E_AS_NE);
+            return false;
+        }
+    }
+
+    // Step 24.
+    for (size_t i = 0; i < uncheckedResultKeys.length(); ++i) {
+        if (uncheckedResultKeys[i].get() != JSID_VOID) {
+            JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_CANT_REPORT_NEW);
+            return false;
+        }
+    }
+
+    // Step 25.
+    return props.appendAll(trapResult);
 }
 
 // ES6 draft rev 32 (2 Feb 2014) 9.5.10 Proxy.[[Delete]](P)
 bool
-ScriptedDirectProxyHandler::delete_(JSContext *cx, HandleObject proxy, HandleId id,
-                                    ObjectOpResult &result) const
+ScriptedDirectProxyHandler::delete_(JSContext* cx, HandleObject proxy, HandleId id,
+                                    ObjectOpResult& result) const
 {
     // step 2
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -730,7 +728,7 @@ ScriptedDirectProxyHandler::delete_(JSContext *cx, HandleObject proxy, HandleId 
     // step 14-15
     if (desc.object() && !desc.configurable()) {
         RootedValue v(cx, IdToValue(id));
-        ReportValueError(cx, JSMSG_CANT_DELETE, JSDVG_IGNORE_STACK, v, js::NullPtr());
+        ReportValueError(cx, JSMSG_CANT_DELETE, JSDVG_IGNORE_STACK, v, nullptr);
         return false;
     }
 
@@ -740,7 +738,7 @@ ScriptedDirectProxyHandler::delete_(JSContext *cx, HandleObject proxy, HandleId 
 
 // ES6 (14 October, 2014) 9.5.11 Proxy.[[Enumerate]]
 bool
-ScriptedDirectProxyHandler::enumerate(JSContext *cx, HandleObject proxy,
+ScriptedDirectProxyHandler::enumerate(JSContext* cx, HandleObject proxy,
                                       MutableHandleObject objp) const
 {
     // step 1
@@ -786,7 +784,7 @@ ScriptedDirectProxyHandler::enumerate(JSContext *cx, HandleObject proxy,
 
 // ES6 (22 May, 2014) 9.5.7 Proxy.[[HasProperty]](P)
 bool
-ScriptedDirectProxyHandler::has(JSContext *cx, HandleObject proxy, HandleId id, bool *bp) const
+ScriptedDirectProxyHandler::has(JSContext* cx, HandleObject proxy, HandleId id, bool* bp) const
 {
     // step 2
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -853,7 +851,7 @@ ScriptedDirectProxyHandler::has(JSContext *cx, HandleObject proxy, HandleId id, 
 
 // ES6 (22 May, 2014) 9.5.8 Proxy.[[GetP]](P, Receiver)
 bool
-ScriptedDirectProxyHandler::get(JSContext *cx, HandleObject proxy, HandleObject receiver,
+ScriptedDirectProxyHandler::get(JSContext* cx, HandleObject proxy, HandleValue receiver,
                                 HandleId id, MutableHandleValue vp) const
 {
     // step 2
@@ -884,7 +882,7 @@ ScriptedDirectProxyHandler::get(JSContext *cx, HandleObject proxy, HandleObject 
     Value argv[] = {
         ObjectOrNullValue(target),
         value,
-        ObjectOrNullValue(receiver)
+        receiver
     };
     RootedValue trapResult(cx);
     if (!Invoke(cx, ObjectValue(*handler), trap, ArrayLength(argv), argv, &trapResult))
@@ -922,8 +920,8 @@ ScriptedDirectProxyHandler::get(JSContext *cx, HandleObject proxy, HandleObject 
 
 // ES6 draft rev 32 (2015 Feb 2) 9.5.9 Proxy.[[Set]](P, V, Receiver)
 bool
-ScriptedDirectProxyHandler::set(JSContext *cx, HandleObject proxy, HandleObject receiver,
-                                HandleId id, MutableHandleValue vp, ObjectOpResult &result) const
+ScriptedDirectProxyHandler::set(JSContext* cx, HandleObject proxy, HandleId id, HandleValue v,
+                                HandleValue receiver, ObjectOpResult& result) const
 {
     // step 2-3 (Steps 1 and 4 are irrelevant assertions.)
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -940,7 +938,7 @@ ScriptedDirectProxyHandler::set(JSContext *cx, HandleObject proxy, HandleObject 
 
     // step 8
     if (trap.isUndefined())
-        return SetProperty(cx, target, receiver, id, vp, result);
+        return SetProperty(cx, target, id, v, receiver, result);
 
     // step 9-10
     RootedValue value(cx);
@@ -949,8 +947,8 @@ ScriptedDirectProxyHandler::set(JSContext *cx, HandleObject proxy, HandleObject 
     Value argv[] = {
         ObjectOrNullValue(target),
         value,
-        vp.get(),
-        ObjectValue(*receiver)
+        v.get(),
+        receiver.get()
     };
     RootedValue trapResult(cx);
     if (!Invoke(cx, ObjectValue(*handler), trap, ArrayLength(argv), argv, &trapResult))
@@ -969,7 +967,7 @@ ScriptedDirectProxyHandler::set(JSContext *cx, HandleObject proxy, HandleObject 
     if (desc.object()) {
         if (desc.isDataDescriptor() && !desc.configurable() && !desc.writable()) {
             bool same;
-            if (!SameValue(cx, vp, desc.value(), &same))
+            if (!SameValue(cx, v, desc.value(), &same))
                 return false;
             if (!same) {
                 JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_CANT_SET_NW_NC);
@@ -989,7 +987,7 @@ ScriptedDirectProxyHandler::set(JSContext *cx, HandleObject proxy, HandleObject 
 
 // ES6 (22 May, 2014) 9.5.13 Proxy.[[Call]]
 bool
-ScriptedDirectProxyHandler::call(JSContext *cx, HandleObject proxy, const CallArgs &args) const
+ScriptedDirectProxyHandler::call(JSContext* cx, HandleObject proxy, const CallArgs& args) const
 {
     // step 1
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -1032,7 +1030,7 @@ ScriptedDirectProxyHandler::call(JSContext *cx, HandleObject proxy, const CallAr
 
 // ES6 (22 May, 2014) 9.5.14 Proxy.[[Construct]]
 bool
-ScriptedDirectProxyHandler::construct(JSContext *cx, HandleObject proxy, const CallArgs &args) const
+ScriptedDirectProxyHandler::construct(JSContext* cx, HandleObject proxy, const CallArgs& args) const
 {
     // step 1
     RootedObject handler(cx, GetDirectProxyHandlerObject(proxy));
@@ -1059,14 +1057,19 @@ ScriptedDirectProxyHandler::construct(JSContext *cx, HandleObject proxy, const C
 
     // step 6
     if (trap.isUndefined()) {
+        ConstructArgs cargs(cx);
+        if (!FillArgumentsFromArraylike(cx, cargs, args))
+            return false;
+
         RootedValue targetv(cx, ObjectValue(*target));
-        return InvokeConstructor(cx, targetv, args.length(), args.array(), args.rval());
+        return Construct(cx, targetv, cargs, args.newTarget(), args.rval());
     }
 
     // step 8-9
     Value constructArgv[] = {
         ObjectValue(*target),
-        ObjectValue(*argsArray)
+        ObjectValue(*argsArray),
+        args.newTarget()
     };
     RootedValue thisValue(cx, ObjectValue(*handler));
     if (!Invoke(cx, thisValue, trap, ArrayLength(constructArgv), constructArgv, args.rval()))
@@ -1081,16 +1084,16 @@ ScriptedDirectProxyHandler::construct(JSContext *cx, HandleObject proxy, const C
 }
 
 bool
-ScriptedDirectProxyHandler::nativeCall(JSContext *cx, IsAcceptableThis test, NativeImpl impl,
-                                       CallArgs args) const
+ScriptedDirectProxyHandler::nativeCall(JSContext* cx, IsAcceptableThis test, NativeImpl impl,
+                                       const CallArgs& args) const
 {
     ReportIncompatible(cx, args);
     return false;
 }
 
 bool
-ScriptedDirectProxyHandler::hasInstance(JSContext *cx, HandleObject proxy, MutableHandleValue v,
-                                        bool *bp) const
+ScriptedDirectProxyHandler::hasInstance(JSContext* cx, HandleObject proxy, MutableHandleValue v,
+                                        bool* bp) const
 {
     RootedObject target(cx, proxy->as<ProxyObject>().target());
     if (!target) {
@@ -1102,27 +1105,27 @@ ScriptedDirectProxyHandler::hasInstance(JSContext *cx, HandleObject proxy, Mutab
 }
 
 bool
-ScriptedDirectProxyHandler::objectClassIs(HandleObject proxy, ESClassValue classValue,
-                                          JSContext *cx) const
+ScriptedDirectProxyHandler::getBuiltinClass(JSContext* cx, HandleObject proxy,
+                                            ESClassValue* classValue) const
 {
-    // Special case IsArray. In every other instance ES wants to have exactly
-    // one object type and not a proxy around it, so return false.
-    if (classValue != ESClass_IsArray)
-        return false;
-
-    // In ES6 IsArray is supposed to poke at the Proxy target, instead we do this here.
-    // The reason for this is that we have proxies for which looking at the target might
-    // be impossible. So instead we use our little objectClassIs function that just works
-    // already across different wrappers.
-    RootedObject target(cx, proxy->as<ProxyObject>().target());
-    if (!target)
-        return false;
-
-    return IsArray(target, cx);
+    *classValue = ESClass_Other;
+    return true;
 }
 
-const char *
-ScriptedDirectProxyHandler::className(JSContext *cx, HandleObject proxy) const
+bool
+ScriptedDirectProxyHandler::isArray(JSContext* cx, HandleObject proxy,
+                                    IsArrayAnswer* answer) const
+{
+    RootedObject target(cx, proxy->as<ProxyObject>().target());
+    if (target)
+        return JS::IsArray(cx, target, answer);
+
+    *answer = IsArrayAnswer::RevokedProxy;
+    return true;
+}
+
+const char*
+ScriptedDirectProxyHandler::className(JSContext* cx, HandleObject proxy) const
 {
     // Right now the caller is not prepared to handle failures.
     RootedObject target(cx, proxy->as<ProxyObject>().target());
@@ -1131,8 +1134,8 @@ ScriptedDirectProxyHandler::className(JSContext *cx, HandleObject proxy) const
 
     return GetObjectClassName(cx, target);
 }
-JSString *
-ScriptedDirectProxyHandler::fun_toString(JSContext *cx, HandleObject proxy,
+JSString*
+ScriptedDirectProxyHandler::fun_toString(JSContext* cx, HandleObject proxy,
                                          unsigned indent) const
 {
     JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_INCOMPATIBLE_PROTO,
@@ -1141,15 +1144,15 @@ ScriptedDirectProxyHandler::fun_toString(JSContext *cx, HandleObject proxy,
 }
 
 bool
-ScriptedDirectProxyHandler::regexp_toShared(JSContext *cx, HandleObject proxy,
-                                            RegExpGuard *g) const
+ScriptedDirectProxyHandler::regexp_toShared(JSContext* cx, HandleObject proxy,
+                                            RegExpGuard* g) const
 {
     MOZ_CRASH("Should not end up in ScriptedDirectProxyHandler::regexp_toShared");
     return false;
 }
 
 bool
-ScriptedDirectProxyHandler::boxedValue_unbox(JSContext *cx, HandleObject proxy,
+ScriptedDirectProxyHandler::boxedValue_unbox(JSContext* cx, HandleObject proxy,
                                              MutableHandleValue vp) const
 {
     MOZ_CRASH("Should not end up in ScriptedDirectProxyHandler::boxedValue_unbox");
@@ -1157,7 +1160,7 @@ ScriptedDirectProxyHandler::boxedValue_unbox(JSContext *cx, HandleObject proxy,
 }
 
 bool
-ScriptedDirectProxyHandler::isCallable(JSObject *obj) const
+ScriptedDirectProxyHandler::isCallable(JSObject* obj) const
 {
     MOZ_ASSERT(obj->as<ProxyObject>().handler() == &ScriptedDirectProxyHandler::singleton);
     uint32_t callConstruct = obj->as<ProxyObject>().extra(IS_CALLCONSTRUCT_EXTRA).toPrivateUint32();
@@ -1165,7 +1168,7 @@ ScriptedDirectProxyHandler::isCallable(JSObject *obj) const
 }
 
 bool
-ScriptedDirectProxyHandler::isConstructor(JSObject *obj) const
+ScriptedDirectProxyHandler::isConstructor(JSObject* obj) const
 {
     MOZ_ASSERT(obj->as<ProxyObject>().handler() == &ScriptedDirectProxyHandler::singleton);
     uint32_t callConstruct = obj->as<ProxyObject>().extra(IS_CALLCONSTRUCT_EXTRA).toPrivateUint32();
@@ -1175,53 +1178,81 @@ ScriptedDirectProxyHandler::isConstructor(JSObject *obj) const
 const char ScriptedDirectProxyHandler::family = 0;
 const ScriptedDirectProxyHandler ScriptedDirectProxyHandler::singleton;
 
+bool
+IsRevokedScriptedProxy(JSObject* obj)
+{
+    obj = CheckedUnwrap(obj);
+    return obj && IsScriptedProxy(obj) && !obj->as<ProxyObject>().target();
+}
+
+// ES6 draft rc4 9.5.15.
 static bool
-NewScriptedProxy(JSContext *cx, CallArgs &args, const char *callerName)
+NewScriptedProxy(JSContext* cx, CallArgs& args, const char* callerName)
 {
     if (args.length() < 2) {
         JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_MORE_ARGS_NEEDED,
                              callerName, "1", "s");
         return false;
     }
+
+    // Step 1.
     RootedObject target(cx, NonNullObject(cx, args[0]));
     if (!target)
         return false;
+
+    // Step 2.
+    if (IsRevokedScriptedProxy(target)) {
+        JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_PROXY_ARG_REVOKED, "1");
+        return false;
+    }
+
+    // Step 3.
     RootedObject handler(cx, NonNullObject(cx, args[1]));
     if (!handler)
         return false;
+
+    // Step 4.
+    if (IsRevokedScriptedProxy(handler)) {
+        JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_PROXY_ARG_REVOKED, "2");
+        return false;
+    }
+
+    // Steps 5-6, and 8 (reordered).
     RootedValue priv(cx, ObjectValue(*target));
-    JSObject *proxy_ =
+    JSObject* proxy_ =
         NewProxyObject(cx, &ScriptedDirectProxyHandler::singleton,
                        priv, TaggedProto::LazyProto);
     if (!proxy_)
         return false;
+
+    // Step 9 (reordered).
     Rooted<ProxyObject*> proxy(cx, &proxy_->as<ProxyObject>());
     proxy->setExtra(ScriptedDirectProxyHandler::HANDLER_EXTRA, ObjectValue(*handler));
 
-    // Assign [[Call]] and [[Construct]]
+    // Step 7, Assign [[Call]] and [[Construct]].
     uint32_t callable = target->isCallable() ? ScriptedDirectProxyHandler::IS_CALLABLE : 0;
     uint32_t constructor = target->isConstructor() ? ScriptedDirectProxyHandler::IS_CONSTRUCTOR : 0;
     proxy->as<ProxyObject>().setExtra(ScriptedDirectProxyHandler::IS_CALLCONSTRUCT_EXTRA,
                                       PrivateUint32Value(callable | constructor));
+
+    // Step 10.
     args.rval().setObject(*proxy);
     return true;
 }
 
 bool
-js::proxy(JSContext *cx, unsigned argc, Value *vp)
+js::proxy(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
-    if (!args.isConstructing()) {
-        JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_NOT_FUNCTION, "Proxy");
+    if (!ThrowIfNotConstructing(cx, args, "Proxy"))
         return false;
-    }
 
     return NewScriptedProxy(cx, args, "Proxy");
 }
 
 static bool
-RevokeProxy(JSContext *cx, unsigned argc, Value *vp)
+RevokeProxy(JSContext* cx, unsigned argc, Value* vp)
 {
     CallReceiver rec = CallReceiverFromVp(vp);
 
@@ -1242,7 +1273,7 @@ RevokeProxy(JSContext *cx, unsigned argc, Value *vp)
 }
 
 bool
-js::proxy_revocable(JSContext *cx, unsigned argc, Value *vp)
+js::proxy_revocable(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 

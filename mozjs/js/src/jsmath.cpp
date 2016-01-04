@@ -10,11 +10,9 @@
 
 #include "jsmath.h"
 
-#include "mozilla/Constants.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/MathAlgorithms.h"
 #include "mozilla/MemoryReporting.h"
-#include "mozilla/unused.h"
 
 #include <algorithm>  // for std::max
 #include <fcntl.h>
@@ -23,19 +21,33 @@
 # include <unistd.h>
 #endif
 
+#ifdef XP_WIN
+# include "jswin.h"
+#endif
+
 #include "jsapi.h"
 #include "jsatom.h"
 #include "jscntxt.h"
 #include "jscompartment.h"
 #include "jslibmath.h"
 #include "jstypes.h"
-#include "prmjtime.h"
 
+#include "jit/InlinableNatives.h"
 #include "js/Class.h"
+#include "vm/Time.h"
 
 #include "jsobjinlines.h"
 
-#if defined(ANDROID) || defined(XP_MACOSX) || defined(__DragonFly__) || \
+#if defined(XP_WIN)
+// #define needed to link in RtlGenRandom(), a.k.a. SystemFunction036.  See the
+// "Community Additions" comment on MSDN here:
+// https://msdn.microsoft.com/en-us/library/windows/desktop/aa387694.aspx
+# define SystemFunction036 NTAPI SystemFunction036
+# include <NTSecAPI.h>
+# undef SystemFunction036
+#endif
+
+#if defined(ANDROID) || defined(XP_DARWIN) || defined(__DragonFly__) || \
     defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 # include <stdlib.h>
 # define HAVE_ARC4RANDOM
@@ -91,7 +103,7 @@ const Class js::MathClass = {
 };
 
 bool
-js::math_abs_handle(JSContext *cx, js::HandleValue v, js::MutableHandleValue r)
+js::math_abs_handle(JSContext* cx, js::HandleValue v, js::MutableHandleValue r)
 {
     double x;
     if (!ToNumber(cx, v, &x))
@@ -104,7 +116,7 @@ js::math_abs_handle(JSContext *cx, js::HandleValue v, js::MutableHandleValue r)
 }
 
 bool
-js::math_abs(JSContext *cx, unsigned argc, Value *vp)
+js::math_abs(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -123,7 +135,7 @@ js::math_abs(JSContext *cx, unsigned argc, Value *vp)
 #endif
 
 double
-js::math_acos_impl(MathCache *cache, double x)
+js::math_acos_impl(MathCache* cache, double x)
 {
     ACOS_IF_OUT_OF_RANGE(x);
     return cache->lookup(acos, x, MathCache::Acos);
@@ -139,7 +151,7 @@ js::math_acos_uncached(double x)
 #undef ACOS_IF_OUT_OF_RANGE
 
 bool
-js::math_acos(JSContext *cx, unsigned argc, Value *vp)
+js::math_acos(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -152,7 +164,7 @@ js::math_acos(JSContext *cx, unsigned argc, Value *vp)
     if (!ToNumber(cx, args[0], &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -168,7 +180,7 @@ js::math_acos(JSContext *cx, unsigned argc, Value *vp)
 #endif
 
 double
-js::math_asin_impl(MathCache *cache, double x)
+js::math_asin_impl(MathCache* cache, double x)
 {
     ASIN_IF_OUT_OF_RANGE(x);
     return cache->lookup(asin, x, MathCache::Asin);
@@ -184,7 +196,7 @@ js::math_asin_uncached(double x)
 #undef ASIN_IF_OUT_OF_RANGE
 
 bool
-js::math_asin(JSContext *cx, unsigned argc, Value *vp)
+js::math_asin(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -197,7 +209,7 @@ js::math_asin(JSContext *cx, unsigned argc, Value *vp)
     if (!ToNumber(cx, args[0], &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -207,7 +219,7 @@ js::math_asin(JSContext *cx, unsigned argc, Value *vp)
 }
 
 double
-js::math_atan_impl(MathCache *cache, double x)
+js::math_atan_impl(MathCache* cache, double x)
 {
     return cache->lookup(atan, x, MathCache::Atan);
 }
@@ -219,7 +231,7 @@ js::math_atan_uncached(double x)
 }
 
 bool
-js::math_atan(JSContext *cx, unsigned argc, Value *vp)
+js::math_atan(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -232,7 +244,7 @@ js::math_atan(JSContext *cx, unsigned argc, Value *vp)
     if (!ToNumber(cx, args[0], &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -272,7 +284,7 @@ js::ecmaAtan2(double y, double x)
 }
 
 bool
-js::math_atan2_handle(JSContext *cx, HandleValue y, HandleValue x, MutableHandleValue res)
+js::math_atan2_handle(JSContext* cx, HandleValue y, HandleValue x, MutableHandleValue res)
 {
     double dy;
     if (!ToNumber(cx, y, &dy))
@@ -288,7 +300,7 @@ js::math_atan2_handle(JSContext *cx, HandleValue y, HandleValue x, MutableHandle
 }
 
 bool
-js::math_atan2(JSContext *cx, unsigned argc, Value *vp)
+js::math_atan2(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -306,19 +318,19 @@ js::math_ceil_impl(double x)
 }
 
 bool
-js::math_ceil_handle(JSContext *cx, HandleValue v, MutableHandleValue res)
+js::math_ceil_handle(JSContext* cx, HandleValue v, MutableHandleValue res)
 {
     double d;
     if(!ToNumber(cx, v, &d))
         return false;
 
     double result = math_ceil_impl(d);
-    res.setDouble(result);
+    res.setNumber(result);
     return true;
 }
 
 bool
-js::math_ceil(JSContext *cx, unsigned argc, Value *vp)
+js::math_ceil(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -331,7 +343,7 @@ js::math_ceil(JSContext *cx, unsigned argc, Value *vp)
 }
 
 bool
-js::math_clz32(JSContext *cx, unsigned argc, Value *vp)
+js::math_clz32(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -354,7 +366,7 @@ js::math_clz32(JSContext *cx, unsigned argc, Value *vp)
 }
 
 double
-js::math_cos_impl(MathCache *cache, double x)
+js::math_cos_impl(MathCache* cache, double x)
 {
     return cache->lookup(cos, x, MathCache::Cos);
 }
@@ -366,7 +378,7 @@ js::math_cos_uncached(double x)
 }
 
 bool
-js::math_cos(JSContext *cx, unsigned argc, Value *vp)
+js::math_cos(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -379,7 +391,7 @@ js::math_cos(JSContext *cx, unsigned argc, Value *vp)
     if (!ToNumber(cx, args[0], &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -401,7 +413,7 @@ js::math_cos(JSContext *cx, unsigned argc, Value *vp)
 #endif
 
 double
-js::math_exp_impl(MathCache *cache, double x)
+js::math_exp_impl(MathCache* cache, double x)
 {
     EXP_IF_OUT_OF_RANGE(x);
     return cache->lookup(exp, x, MathCache::Exp);
@@ -417,7 +429,7 @@ js::math_exp_uncached(double x)
 #undef EXP_IF_OUT_OF_RANGE
 
 bool
-js::math_exp(JSContext *cx, unsigned argc, Value *vp)
+js::math_exp(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -430,7 +442,7 @@ js::math_exp(JSContext *cx, unsigned argc, Value *vp)
     if (!ToNumber(cx, args[0], &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -446,7 +458,7 @@ js::math_floor_impl(double x)
 }
 
 bool
-js::math_floor_handle(JSContext *cx, HandleValue v, MutableHandleValue r)
+js::math_floor_handle(JSContext* cx, HandleValue v, MutableHandleValue r)
 {
     double d;
     if (!ToNumber(cx, v, &d))
@@ -459,7 +471,7 @@ js::math_floor_handle(JSContext *cx, HandleValue v, MutableHandleValue r)
 }
 
 bool
-js::math_floor(JSContext *cx, unsigned argc, Value *vp)
+js::math_floor(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -472,7 +484,7 @@ js::math_floor(JSContext *cx, unsigned argc, Value *vp)
 }
 
 bool
-js::math_imul(JSContext *cx, unsigned argc, Value *vp)
+js::math_imul(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -491,7 +503,7 @@ js::math_imul(JSContext *cx, unsigned argc, Value *vp)
 
 // Implements Math.fround (20.2.2.16) up to step 3
 bool
-js::RoundFloat32(JSContext *cx, HandleValue v, float *out)
+js::RoundFloat32(JSContext* cx, HandleValue v, float* out)
 {
     double d;
     bool success = ToNumber(cx, v, &d);
@@ -500,7 +512,7 @@ js::RoundFloat32(JSContext *cx, HandleValue v, float *out)
 }
 
 bool
-js::RoundFloat32(JSContext *cx, HandleValue arg, MutableHandleValue res)
+js::RoundFloat32(JSContext* cx, HandleValue arg, MutableHandleValue res)
 {
     float f;
     if (!RoundFloat32(cx, arg, &f))
@@ -511,7 +523,7 @@ js::RoundFloat32(JSContext *cx, HandleValue arg, MutableHandleValue res)
 }
 
 bool
-js::math_fround(JSContext *cx, unsigned argc, Value *vp)
+js::math_fround(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -530,7 +542,7 @@ js::math_fround(JSContext *cx, unsigned argc, Value *vp)
 #endif
 
 double
-js::math_log_impl(MathCache *cache, double x)
+js::math_log_impl(MathCache* cache, double x)
 {
     LOG_IF_OUT_OF_RANGE(x);
     return cache->lookup(math_log_uncached, x, MathCache::Log);
@@ -546,13 +558,13 @@ js::math_log_uncached(double x)
 #undef LOG_IF_OUT_OF_RANGE
 
 bool
-js::math_log_handle(JSContext *cx, HandleValue val, MutableHandleValue res)
+js::math_log_handle(JSContext* cx, HandleValue val, MutableHandleValue res)
 {
     double in;
     if (!ToNumber(cx, val, &in))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -562,7 +574,7 @@ js::math_log_handle(JSContext *cx, HandleValue val, MutableHandleValue res)
 }
 
 bool
-js::math_log(JSContext *cx, unsigned argc, Value *vp)
+js::math_log(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -584,7 +596,7 @@ js::math_max_impl(double x, double y)
 }
 
 bool
-js::math_max(JSContext *cx, unsigned argc, Value *vp)
+js::math_max(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -609,7 +621,7 @@ js::math_min_impl(double x, double y)
 }
 
 bool
-js::math_min(JSContext *cx, unsigned argc, Value *vp)
+js::math_min(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -625,7 +637,7 @@ js::math_min(JSContext *cx, unsigned argc, Value *vp)
 }
 
 bool
-js::minmax_impl(JSContext *cx, bool max, HandleValue a, HandleValue b, MutableHandleValue res)
+js::minmax_impl(JSContext* cx, bool max, HandleValue a, HandleValue b, MutableHandleValue res)
 {
     double x, y;
 
@@ -706,7 +718,7 @@ js::ecmaPow(double x, double y)
 }
 
 bool
-js::math_pow_handle(JSContext *cx, HandleValue base, HandleValue power, MutableHandleValue result)
+js::math_pow_handle(JSContext* cx, HandleValue base, HandleValue power, MutableHandleValue result)
 {
     double x;
     if (!ToNumber(cx, base, &x))
@@ -722,7 +734,7 @@ js::math_pow_handle(JSContext *cx, HandleValue base, HandleValue power, MutableH
 }
 
 bool
-js::math_pow(JSContext *cx, unsigned argc, Value *vp)
+js::math_pow(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -730,92 +742,63 @@ js::math_pow(JSContext *cx, unsigned argc, Value *vp)
 }
 
 static uint64_t
-random_generateSeed()
+GenerateSeed()
 {
-    union {
-        uint8_t     u8[8];
-        uint32_t    u32[2];
-        uint64_t    u64;
-    } seed;
-    seed.u64 = 0;
+    uint64_t seed = 0;
 
 #if defined(XP_WIN)
-    errno_t error = rand_s(&seed.u32[0]);
-    MOZ_ASSERT(error == 0, "rand_s() error?!");
-
-    error = rand_s(&seed.u32[1]);
-    MOZ_ASSERT(error == 0, "rand_s() error?!");
+    MOZ_ALWAYS_TRUE(RtlGenRandom(&seed, sizeof(seed)));
 #elif defined(HAVE_ARC4RANDOM)
-    seed.u32[0] = arc4random();
-    seed.u32[1] = arc4random();
+    seed = (static_cast<uint64_t>(arc4random()) << 32) | arc4random();
 #elif defined(XP_UNIX)
     int fd = open("/dev/urandom", O_RDONLY);
-    MOZ_ASSERT(fd >= 0, "Can't open /dev/urandom?!");
     if (fd >= 0) {
-        ssize_t nread = read(fd, seed.u8, mozilla::ArrayLength(seed.u8));
-        MOZ_ASSERT(nread == 8, "Can't read /dev/urandom?!");
-        mozilla::unused << nread;
+        read(fd, static_cast<void*>(&seed), sizeof(seed));
         close(fd);
     }
 #else
-# error "Platform needs to implement random_generateSeed()"
+# error "Platform needs to implement GenerateSeed()"
 #endif
 
-    seed.u64 ^= PRMJ_Now();
-    return seed.u64;
+    // Also mix in PRMJ_Now() in case we couldn't read random bits from the OS.
+    return seed ^ PRMJ_Now();
 }
 
-static const uint64_t RNG_MULTIPLIER = 0x5DEECE66DLL;
-static const uint64_t RNG_ADDEND = 0xBLL;
-static const uint64_t RNG_MASK = (1LL << 48) - 1;
-
-/*
- * Math.random() support, lifted from java.util.Random.java.
- */
 void
-js::random_initState(uint64_t *rngState)
+js::GenerateXorShift128PlusSeed(mozilla::Array<uint64_t, 2>& seed)
 {
-    /* Our PRNG only uses 48 bits, so squeeze our entropy into those bits. */
-    uint64_t seed = random_generateSeed();
-    seed ^= (seed >> 16);
-    *rngState = (seed ^ RNG_MULTIPLIER) & RNG_MASK;
+    // XorShift128PlusRNG must be initialized with a non-zero seed.
+    do {
+        seed[0] = GenerateSeed();
+        seed[1] = GenerateSeed();
+    } while (seed[0] == 0 && seed[1] == 0);
 }
 
-uint64_t
-js::random_next(uint64_t *rngState, int bits)
+void
+JSCompartment::ensureRandomNumberGenerator()
 {
-    MOZ_ASSERT((*rngState & 0xffff000000000000ULL) == 0, "Bad rngState");
-    MOZ_ASSERT(bits > 0 && bits <= 48, "bits is out of range");
-
-    if (*rngState == 0) {
-        random_initState(rngState);
+    if (randomNumberGenerator.isNothing()) {
+        mozilla::Array<uint64_t, 2> seed;
+        GenerateXorShift128PlusSeed(seed);
+        randomNumberGenerator.emplace(seed[0], seed[1]);
     }
-
-    uint64_t nextstate = *rngState * RNG_MULTIPLIER;
-    nextstate += RNG_ADDEND;
-    nextstate &= RNG_MASK;
-    *rngState = nextstate;
-    return nextstate >> (48 - bits);
-}
-
-double
-js::math_random_no_outparam(JSContext *cx)
-{
-    /* Calculate random without memory traffic, for use in the JITs. */
-    return random_nextDouble(&cx->compartment()->rngState);
 }
 
 bool
-js::math_random(JSContext *cx, unsigned argc, Value *vp)
+js::math_random(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
-    double z = random_nextDouble(&cx->compartment()->rngState);
+
+    JSCompartment* comp = cx->compartment();
+    comp->ensureRandomNumberGenerator();
+
+    double z = comp->randomNumberGenerator.ref().nextDouble();
     args.rval().setDouble(z);
     return true;
 }
 
 bool
-js::math_round_handle(JSContext *cx, HandleValue arg, MutableHandleValue res)
+js::math_round_handle(JSContext* cx, HandleValue arg, MutableHandleValue res)
 {
     double d;
     if (!ToNumber(cx, arg, &d))
@@ -872,7 +855,7 @@ js::math_roundf_impl(float x)
 }
 
 bool /* ES5 15.8.2.15. */
-js::math_round(JSContext *cx, unsigned argc, Value *vp)
+js::math_round(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -885,7 +868,7 @@ js::math_round(JSContext *cx, unsigned argc, Value *vp)
 }
 
 double
-js::math_sin_impl(MathCache *cache, double x)
+js::math_sin_impl(MathCache* cache, double x)
 {
     return cache->lookup(math_sin_uncached, x, MathCache::Sin);
 }
@@ -903,13 +886,13 @@ js::math_sin_uncached(double x)
 }
 
 bool
-js::math_sin_handle(JSContext *cx, HandleValue val, MutableHandleValue res)
+js::math_sin_handle(JSContext* cx, HandleValue val, MutableHandleValue res)
 {
     double in;
     if (!ToNumber(cx, val, &in))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -919,7 +902,7 @@ js::math_sin_handle(JSContext *cx, HandleValue val, MutableHandleValue res)
 }
 
 bool
-js::math_sin(JSContext *cx, unsigned argc, Value *vp)
+js::math_sin(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -931,14 +914,48 @@ js::math_sin(JSContext *cx, unsigned argc, Value *vp)
     return math_sin_handle(cx, args[0], args.rval());
 }
 
+void
+js::math_sincos_uncached(double x, double *sin, double *cos)
+{
+#if defined(__GLIBC__)
+    sincos(x, sin, cos);
+#elif defined(HAVE_SINCOS)
+    __sincos(x, sin, cos);
+#else
+    *sin = js::math_sin_uncached(x);
+    *cos = js::math_cos_uncached(x);
+#endif
+}
+
+void
+js::math_sincos_impl(MathCache* mathCache, double x, double *sin, double *cos)
+{
+    unsigned indexSin;
+    unsigned indexCos;
+    bool hasSin = mathCache->isCached(x, MathCache::Sin, sin, &indexSin);
+    bool hasCos = mathCache->isCached(x, MathCache::Cos, cos, &indexCos);
+    if (!(hasSin || hasCos)) {
+        js::math_sincos_uncached(x, sin, cos);
+        mathCache->store(MathCache::Sin, x, *sin, indexSin);
+        mathCache->store(MathCache::Cos, x, *cos, indexCos);
+        return;
+    }
+
+    if (!hasSin)
+        *sin = js::math_sin_impl(mathCache, x);
+
+    if (!hasCos)
+        *cos = js::math_cos_impl(mathCache, x);
+}
+
 bool
-js::math_sqrt_handle(JSContext *cx, HandleValue number, MutableHandleValue result)
+js::math_sqrt_handle(JSContext* cx, HandleValue number, MutableHandleValue result)
 {
     double x;
     if (!ToNumber(cx, number, &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -948,7 +965,7 @@ js::math_sqrt_handle(JSContext *cx, HandleValue number, MutableHandleValue resul
 }
 
 bool
-js::math_sqrt(JSContext *cx, unsigned argc, Value *vp)
+js::math_sqrt(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -961,7 +978,7 @@ js::math_sqrt(JSContext *cx, unsigned argc, Value *vp)
 }
 
 double
-js::math_tan_impl(MathCache *cache, double x)
+js::math_tan_impl(MathCache* cache, double x)
 {
     return cache->lookup(tan, x, MathCache::Tan);
 }
@@ -973,7 +990,7 @@ js::math_tan_uncached(double x)
 }
 
 bool
-js::math_tan(JSContext *cx, unsigned argc, Value *vp)
+js::math_tan(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -986,7 +1003,7 @@ js::math_tan(JSContext *cx, unsigned argc, Value *vp)
     if (!ToNumber(cx, args[0], &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
 
@@ -995,10 +1012,10 @@ js::math_tan(JSContext *cx, unsigned argc, Value *vp)
     return true;
 }
 
-typedef double (*UnaryMathFunctionType)(MathCache *cache, double);
+typedef double (*UnaryMathFunctionType)(MathCache* cache, double);
 
 template <UnaryMathFunctionType F>
-static bool math_function(JSContext *cx, unsigned argc, Value *vp)
+static bool math_function(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
     if (args.length() == 0) {
@@ -1010,7 +1027,7 @@ static bool math_function(JSContext *cx, unsigned argc, Value *vp)
     if (!ToNumber(cx, args[0], &x))
         return false;
 
-    MathCache *mathCache = cx->runtime()->getMathCache(cx);
+    MathCache* mathCache = cx->runtime()->getMathCache(cx);
     if (!mathCache)
         return false;
     double z = F(mathCache, x);
@@ -1020,7 +1037,7 @@ static bool math_function(JSContext *cx, unsigned argc, Value *vp)
 }
 
 double
-js::math_log10_impl(MathCache *cache, double x)
+js::math_log10_impl(MathCache* cache, double x)
 {
     return cache->lookup(log10, x, MathCache::Log10);
 }
@@ -1032,7 +1049,7 @@ js::math_log10_uncached(double x)
 }
 
 bool
-js::math_log10(JSContext *cx, unsigned argc, Value *vp)
+js::math_log10(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_log10_impl>(cx, argc, vp);
 }
@@ -1045,7 +1062,7 @@ double log2(double x)
 #endif
 
 double
-js::math_log2_impl(MathCache *cache, double x)
+js::math_log2_impl(MathCache* cache, double x)
 {
     return cache->lookup(log2, x, MathCache::Log2);
 }
@@ -1057,7 +1074,7 @@ js::math_log2_uncached(double x)
 }
 
 bool
-js::math_log2(JSContext *cx, unsigned argc, Value *vp)
+js::math_log2(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_log2_impl>(cx, argc, vp);
 }
@@ -1087,7 +1104,7 @@ double log1p(double x)
 #endif
 
 double
-js::math_log1p_impl(MathCache *cache, double x)
+js::math_log1p_impl(MathCache* cache, double x)
 {
     LOG1P_IF_OUT_OF_RANGE(x);
     return cache->lookup(log1p, x, MathCache::Log1p);
@@ -1103,7 +1120,7 @@ js::math_log1p_uncached(double x)
 #undef LOG1P_IF_OUT_OF_RANGE
 
 bool
-js::math_log1p(JSContext *cx, unsigned argc, Value *vp)
+js::math_log1p(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_log1p_impl>(cx, argc, vp);
 }
@@ -1130,7 +1147,7 @@ double expm1(double x)
 #endif
 
 double
-js::math_expm1_impl(MathCache *cache, double x)
+js::math_expm1_impl(MathCache* cache, double x)
 {
     return cache->lookup(expm1, x, MathCache::Expm1);
 }
@@ -1142,7 +1159,7 @@ js::math_expm1_uncached(double x)
 }
 
 bool
-js::math_expm1(JSContext *cx, unsigned argc, Value *vp)
+js::math_expm1(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_expm1_impl>(cx, argc, vp);
 }
@@ -1159,7 +1176,7 @@ double sqrt1pm1(double x)
 #endif
 
 double
-js::math_cosh_impl(MathCache *cache, double x)
+js::math_cosh_impl(MathCache* cache, double x)
 {
     return cache->lookup(cosh, x, MathCache::Cosh);
 }
@@ -1171,13 +1188,13 @@ js::math_cosh_uncached(double x)
 }
 
 bool
-js::math_cosh(JSContext *cx, unsigned argc, Value *vp)
+js::math_cosh(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_cosh_impl>(cx, argc, vp);
 }
 
 double
-js::math_sinh_impl(MathCache *cache, double x)
+js::math_sinh_impl(MathCache* cache, double x)
 {
     return cache->lookup(sinh, x, MathCache::Sinh);
 }
@@ -1189,13 +1206,13 @@ js::math_sinh_uncached(double x)
 }
 
 bool
-js::math_sinh(JSContext *cx, unsigned argc, Value *vp)
+js::math_sinh(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_sinh_impl>(cx, argc, vp);
 }
 
 double
-js::math_tanh_impl(MathCache *cache, double x)
+js::math_tanh_impl(MathCache* cache, double x)
 {
     return cache->lookup(tanh, x, MathCache::Tanh);
 }
@@ -1207,7 +1224,7 @@ js::math_tanh_uncached(double x)
 }
 
 bool
-js::math_tanh(JSContext *cx, unsigned argc, Value *vp)
+js::math_tanh(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_tanh_impl>(cx, argc, vp);
 }
@@ -1244,7 +1261,7 @@ double acosh(double x)
 #endif
 
 double
-js::math_acosh_impl(MathCache *cache, double x)
+js::math_acosh_impl(MathCache* cache, double x)
 {
     return cache->lookup(acosh, x, MathCache::Acosh);
 }
@@ -1256,7 +1273,7 @@ js::math_acosh_uncached(double x)
 }
 
 bool
-js::math_acosh(JSContext *cx, unsigned argc, Value *vp)
+js::math_acosh(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_acosh_impl>(cx, argc, vp);
 }
@@ -1297,7 +1314,7 @@ static double my_asinh(double x)
 #endif
 
 double
-js::math_asinh_impl(MathCache *cache, double x)
+js::math_asinh_impl(MathCache* cache, double x)
 {
 #ifdef HAVE_ASINH
     return cache->lookup(asinh, x, MathCache::Asinh);
@@ -1317,7 +1334,7 @@ js::math_asinh_uncached(double x)
 }
 
 bool
-js::math_asinh(JSContext *cx, unsigned argc, Value *vp)
+js::math_asinh(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_asinh_impl>(cx, argc, vp);
 }
@@ -1351,7 +1368,7 @@ double atanh(double x)
 #endif
 
 double
-js::math_atanh_impl(MathCache *cache, double x)
+js::math_atanh_impl(MathCache* cache, double x)
 {
     return cache->lookup(atanh, x, MathCache::Atanh);
 }
@@ -1363,7 +1380,7 @@ js::math_atanh_uncached(double x)
 }
 
 bool
-js::math_atanh(JSContext *cx, unsigned argc, Value *vp)
+js::math_atanh(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_atanh_impl>(cx, argc, vp);
 }
@@ -1386,7 +1403,7 @@ js::ecmaHypot(double x, double y)
 
 static inline
 void
-hypot_step(double &scale, double &sumsq, double x)
+hypot_step(double& scale, double& sumsq, double x)
 {
     double xabs = mozilla::Abs(x);
     if (scale < xabs) {
@@ -1429,14 +1446,14 @@ js::hypot3(double x, double y, double z)
 }
 
 bool
-js::math_hypot(JSContext *cx, unsigned argc, Value *vp)
+js::math_hypot(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
     return math_hypot_handle(cx, args, args.rval());
 }
 
 bool
-js::math_hypot_handle(JSContext *cx, HandleValueArray args, MutableHandleValue res)
+js::math_hypot_handle(JSContext* cx, HandleValueArray args, MutableHandleValue res)
 {
     // IonMonkey calls the system hypot function directly if two arguments are
     // given. Do that here as well to get the same results.
@@ -1478,15 +1495,8 @@ js::math_hypot_handle(JSContext *cx, HandleValueArray args, MutableHandleValue r
     return true;
 }
 
-#if !HAVE_TRUNC
-double trunc(double x)
-{
-    return x > 0 ? floor(x) : ceil(x);
-}
-#endif
-
 double
-js::math_trunc_impl(MathCache *cache, double x)
+js::math_trunc_impl(MathCache* cache, double x)
 {
     return cache->lookup(trunc, x, MathCache::Trunc);
 }
@@ -1498,7 +1508,7 @@ js::math_trunc_uncached(double x)
 }
 
 bool
-js::math_trunc(JSContext *cx, unsigned argc, Value *vp)
+js::math_trunc(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_trunc_impl>(cx, argc, vp);
 }
@@ -1512,7 +1522,7 @@ static double sign(double x)
 }
 
 double
-js::math_sign_impl(MathCache *cache, double x)
+js::math_sign_impl(MathCache* cache, double x)
 {
     return cache->lookup(sign, x, MathCache::Sign);
 }
@@ -1524,7 +1534,7 @@ js::math_sign_uncached(double x)
 }
 
 bool
-js::math_sign(JSContext *cx, unsigned argc, Value *vp)
+js::math_sign(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_sign_impl>(cx, argc, vp);
 }
@@ -1543,7 +1553,7 @@ double cbrt(double x)
 #endif
 
 double
-js::math_cbrt_impl(MathCache *cache, double x)
+js::math_cbrt_impl(MathCache* cache, double x)
 {
     return cache->lookup(cbrt, x, MathCache::Cbrt);
 }
@@ -1555,14 +1565,14 @@ js::math_cbrt_uncached(double x)
 }
 
 bool
-js::math_cbrt(JSContext *cx, unsigned argc, Value *vp)
+js::math_cbrt(JSContext* cx, unsigned argc, Value* vp)
 {
     return math_function<math_cbrt_impl>(cx, argc, vp);
 }
 
 #if JS_HAS_TOSOURCE
 static bool
-math_toSource(JSContext *cx, unsigned argc, Value *vp)
+math_toSource(JSContext* cx, unsigned argc, Value* vp)
 {
     CallArgs args = CallArgsFromVp(argc, vp);
     args.rval().setString(cx->names().Math);
@@ -1574,46 +1584,46 @@ static const JSFunctionSpec math_static_methods[] = {
 #if JS_HAS_TOSOURCE
     JS_FN(js_toSource_str,  math_toSource,        0, 0),
 #endif
-    JS_FN("abs",            math_abs,             1, 0),
-    JS_FN("acos",           math_acos,            1, 0),
-    JS_FN("asin",           math_asin,            1, 0),
-    JS_FN("atan",           math_atan,            1, 0),
-    JS_FN("atan2",          math_atan2,           2, 0),
-    JS_FN("ceil",           math_ceil,            1, 0),
-    JS_FN("clz32",          math_clz32,           1, 0),
-    JS_FN("cos",            math_cos,             1, 0),
-    JS_FN("exp",            math_exp,             1, 0),
-    JS_FN("floor",          math_floor,           1, 0),
-    JS_FN("imul",           math_imul,            2, 0),
-    JS_FN("fround",         math_fround,          1, 0),
-    JS_FN("log",            math_log,             1, 0),
-    JS_FN("max",            math_max,             2, 0),
-    JS_FN("min",            math_min,             2, 0),
-    JS_FN("pow",            math_pow,             2, 0),
-    JS_FN("random",         math_random,          0, 0),
-    JS_FN("round",          math_round,           1, 0),
-    JS_FN("sin",            math_sin,             1, 0),
-    JS_FN("sqrt",           math_sqrt,            1, 0),
-    JS_FN("tan",            math_tan,             1, 0),
-    JS_FN("log10",          math_log10,           1, 0),
-    JS_FN("log2",           math_log2,            1, 0),
-    JS_FN("log1p",          math_log1p,           1, 0),
-    JS_FN("expm1",          math_expm1,           1, 0),
-    JS_FN("cosh",           math_cosh,            1, 0),
-    JS_FN("sinh",           math_sinh,            1, 0),
-    JS_FN("tanh",           math_tanh,            1, 0),
-    JS_FN("acosh",          math_acosh,           1, 0),
-    JS_FN("asinh",          math_asinh,           1, 0),
-    JS_FN("atanh",          math_atanh,           1, 0),
-    JS_FN("hypot",          math_hypot,           2, 0),
-    JS_FN("trunc",          math_trunc,           1, 0),
-    JS_FN("sign",           math_sign,            1, 0),
-    JS_FN("cbrt",           math_cbrt,            1, 0),
+    JS_INLINABLE_FN("abs",    math_abs,             1, 0, MathAbs),
+    JS_INLINABLE_FN("acos",   math_acos,            1, 0, MathACos),
+    JS_INLINABLE_FN("asin",   math_asin,            1, 0, MathASin),
+    JS_INLINABLE_FN("atan",   math_atan,            1, 0, MathATan),
+    JS_INLINABLE_FN("atan2",  math_atan2,           2, 0, MathATan2),
+    JS_INLINABLE_FN("ceil",   math_ceil,            1, 0, MathCeil),
+    JS_INLINABLE_FN("clz32",  math_clz32,           1, 0, MathClz32),
+    JS_INLINABLE_FN("cos",    math_cos,             1, 0, MathCos),
+    JS_INLINABLE_FN("exp",    math_exp,             1, 0, MathExp),
+    JS_INLINABLE_FN("floor",  math_floor,           1, 0, MathFloor),
+    JS_INLINABLE_FN("imul",   math_imul,            2, 0, MathImul),
+    JS_INLINABLE_FN("fround", math_fround,          1, 0, MathFRound),
+    JS_INLINABLE_FN("log",    math_log,             1, 0, MathLog),
+    JS_INLINABLE_FN("max",    math_max,             2, 0, MathMax),
+    JS_INLINABLE_FN("min",    math_min,             2, 0, MathMin),
+    JS_INLINABLE_FN("pow",    math_pow,             2, 0, MathPow),
+    JS_INLINABLE_FN("random", math_random,          0, 0, MathRandom),
+    JS_INLINABLE_FN("round",  math_round,           1, 0, MathRound),
+    JS_INLINABLE_FN("sin",    math_sin,             1, 0, MathSin),
+    JS_INLINABLE_FN("sqrt",   math_sqrt,            1, 0, MathSqrt),
+    JS_INLINABLE_FN("tan",    math_tan,             1, 0, MathTan),
+    JS_INLINABLE_FN("log10",  math_log10,           1, 0, MathLog10),
+    JS_INLINABLE_FN("log2",   math_log2,            1, 0, MathLog2),
+    JS_INLINABLE_FN("log1p",  math_log1p,           1, 0, MathLog1P),
+    JS_INLINABLE_FN("expm1",  math_expm1,           1, 0, MathExpM1),
+    JS_INLINABLE_FN("cosh",   math_cosh,            1, 0, MathCosH),
+    JS_INLINABLE_FN("sinh",   math_sinh,            1, 0, MathSinH),
+    JS_INLINABLE_FN("tanh",   math_tanh,            1, 0, MathTanH),
+    JS_INLINABLE_FN("acosh",  math_acosh,           1, 0, MathACosH),
+    JS_INLINABLE_FN("asinh",  math_asinh,           1, 0, MathASinH),
+    JS_INLINABLE_FN("atanh",  math_atanh,           1, 0, MathATanH),
+    JS_INLINABLE_FN("hypot",  math_hypot,           2, 0, MathHypot),
+    JS_INLINABLE_FN("trunc",  math_trunc,           1, 0, MathTrunc),
+    JS_INLINABLE_FN("sign",   math_sign,            1, 0, MathSign),
+    JS_INLINABLE_FN("cbrt",   math_cbrt,            1, 0, MathCbrt),
     JS_FS_END
 };
 
-JSObject *
-js::InitMathClass(JSContext *cx, HandleObject obj)
+JSObject*
+js::InitMathClass(JSContext* cx, HandleObject obj)
 {
     RootedObject proto(cx, obj->as<GlobalObject>().getOrCreateObjectPrototype(cx));
     if (!proto)
@@ -1622,8 +1632,11 @@ js::InitMathClass(JSContext *cx, HandleObject obj)
     if (!Math)
         return nullptr;
 
-    if (!JS_DefineProperty(cx, obj, js_Math_str, Math, 0, JS_STUBGETTER, JS_STUBSETTER))
+    if (!JS_DefineProperty(cx, obj, js_Math_str, Math, JSPROP_RESOLVING,
+                           JS_STUBGETTER, JS_STUBSETTER))
+    {
         return nullptr;
+    }
     if (!JS_DefineFunctions(cx, Math, math_static_methods))
         return nullptr;
     if (!JS_DefineConstDoubles(cx, Math, math_constants))

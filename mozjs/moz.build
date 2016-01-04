@@ -23,8 +23,13 @@ DIRS += [
 
 if not CONFIG['JS_STANDALONE']:
     CONFIGURE_SUBST_FILES += [
-        'mozilla-config.h',
         'tools/update-packaging/Makefile',
+    ]
+    CONFIGURE_DEFINE_FILES += [
+        'mozilla-config.h',
+    ]
+    EXPORTS += [
+        '!mozilla-config.h',
     ]
 
     DIRS += [
@@ -32,33 +37,20 @@ if not CONFIG['JS_STANDALONE']:
         'probes',
     ]
 
-if CONFIG['JS_STANDALONE'] and CONFIG['OS_TARGET'] == 'Android':
-    DIRS += ['build/stlport']
+DIRS += [
+    'config/external/zlib',
+    'memory',
+    'mfbt',
+    'mozglue',
+]
 
-if not CONFIG['LIBXUL_SDK']:
-    DIRS += [
-        'mozglue',
-        'mfbt',
-        'config/external/zlib',
-    ]
-
-    if CONFIG['MOZ_MEMORY']:
-        DIRS += ['memory']
-
-    if not CONFIG['JS_STANDALONE']:
-        if CONFIG['MOZ_WIDGET_TOOLKIT'] == 'android':
-            DIRS += ['other-licenses/android']
-
-        DIRS += [
-            'memory/fallible',
-            'memory/mozalloc',
-            'memory/volatile',
-        ]
+if CONFIG['MOZ_WIDGET_TOOLKIT'] == 'android' and int(CONFIG['MOZ_ANDROID_MIN_SDK_VERSION']) < 11:
+    DIRS += ['other-licenses/android']
 
 if not CONFIG['JS_STANDALONE']:
     DIRS += ['xpcom/xpidl']
 
-if CONFIG['COMPILE_ENVIRONMENT'] and not CONFIG['LIBXUL_SDK']:
+if CONFIG['COMPILE_ENVIRONMENT']:
     DIRS += ['config/external/nspr']
 
     if not CONFIG['JS_STANDALONE']:

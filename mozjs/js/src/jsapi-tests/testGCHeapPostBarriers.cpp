@@ -8,6 +8,8 @@
 #include "js/RootingAPI.h"
 #include "jsapi-tests/tests.h"
 
+using mozilla::ScopedDeletePtr;
+
 BEGIN_TEST(testGCHeapPostBarriers)
 {
 #ifdef JS_GC_ZEAL
@@ -44,8 +46,8 @@ TestHeapPostBarriers(T initialObj)
     CHECK(js::gc::IsInsideNursery(initialObj));
 
     /* Construct Heap<> wrapper. */
-    JS::Heap<T> *heapData = new JS::Heap<T>();
-    CHECK(heapData);
+    ScopedDeletePtr<JS::Heap<T>> heapData(new JS::Heap<T>);
+    CHECK(heapData.get());
     CHECK(Passthrough(heapData->get() == nullptr));
     *heapData = initialObj;
 
@@ -64,11 +66,10 @@ TestHeapPostBarriers(T initialObj)
     CHECK(value.isInt32());
     CHECK(value.toInt32() == 42);
 
-    delete heapData;
     return true;
 }
 
-JSObject *NurseryObject()
+JSObject* NurseryObject()
 {
     JS::RootedObject obj(cx, JS_NewPlainObject(cx));
     if (!obj)
@@ -77,13 +78,13 @@ JSObject *NurseryObject()
     return obj;
 }
 
-JSFunction *NurseryFunction()
+JSFunction* NurseryFunction()
 {
     /*
      * We don't actually use the function as a function, so here we cheat and
      * cast a JSObject.
      */
-    return static_cast<JSFunction *>(NurseryObject());
+    return static_cast<JSFunction*>(NurseryObject());
 }
 
 END_TEST(testGCHeapPostBarriers)

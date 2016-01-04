@@ -22,7 +22,7 @@ using mozilla::UniquePtr;
 bool
 ForOfIterator::init(HandleValue iterable, NonIterableBehavior nonIterableBehavior)
 {
-    JSContext *cx = cx_;
+    JSContext* cx = cx_;
     RootedObject iterableObj(cx, ToObject(cx, iterable));
     if (!iterableObj)
         return false;
@@ -31,7 +31,7 @@ ForOfIterator::init(HandleValue iterable, NonIterableBehavior nonIterableBehavio
 
     // Check the PIC first for a match.
     if (iterableObj->is<ArrayObject>()) {
-        ForOfPIC::Chain *stubChain = ForOfPIC::getOrCreate(cx);
+        ForOfPIC::Chain* stubChain = ForOfPIC::getOrCreate(cx);
         if (!stubChain)
             return false;
 
@@ -53,7 +53,7 @@ ForOfIterator::init(HandleValue iterable, NonIterableBehavior nonIterableBehavio
     InvokeArgs args(cx);
     if (!args.init(0))
         return false;
-    args.setThis(ObjectValue(*iterableObj));
+    args.setThis(iterable);
 
     RootedValue callee(cx);
     RootedId iteratorId(cx, SYMBOL_TO_JSID(cx->wellKnownSymbols().iterator));
@@ -72,7 +72,7 @@ ForOfIterator::init(HandleValue iterable, NonIterableBehavior nonIterableBehavio
     // one about |obj|.
     if (!callee.isObject() || !callee.toObject().isCallable()) {
         UniquePtr<char[], JS::FreePolicy> bytes = DecompileValueGenerator(cx, JSDVG_SEARCH_STACK,
-                                                                          iterable, NullPtr());
+                                                                          iterable, nullptr);
         if (!bytes)
             return false;
         JS_ReportErrorNumber(cx, GetErrorMessage, nullptr, JSMSG_NOT_ITERABLE, bytes.get());
@@ -90,23 +90,15 @@ ForOfIterator::init(HandleValue iterable, NonIterableBehavior nonIterableBehavio
     return true;
 }
 
-bool
-ForOfIterator::initWithIterator(HandleValue aIterator)
-{
-    JSContext *cx = cx_;
-    RootedObject iteratorObj(cx, ToObject(cx, aIterator));
-    return iterator = iteratorObj;
-}
-
 inline bool
-ForOfIterator::nextFromOptimizedArray(MutableHandleValue vp, bool *done)
+ForOfIterator::nextFromOptimizedArray(MutableHandleValue vp, bool* done)
 {
     MOZ_ASSERT(index != NOT_ARRAY);
 
     if (!CheckForInterrupt(cx_))
         return false;
 
-    ArrayObject *arr = &iterator->as<ArrayObject>();
+    ArrayObject* arr = &iterator->as<ArrayObject>();
 
     if (index >= arr->length()) {
         vp.setUndefined();
@@ -128,12 +120,11 @@ ForOfIterator::nextFromOptimizedArray(MutableHandleValue vp, bool *done)
 }
 
 bool
-ForOfIterator::next(MutableHandleValue vp, bool *done)
+ForOfIterator::next(MutableHandleValue vp, bool* done)
 {
     MOZ_ASSERT(iterator);
-
     if (index != NOT_ARRAY) {
-        ForOfPIC::Chain *stubChain = ForOfPIC::getOrCreate(cx_);
+        ForOfPIC::Chain* stubChain = ForOfPIC::getOrCreate(cx_);
         if (!stubChain)
             return false;
 
@@ -151,11 +142,10 @@ ForOfIterator::next(MutableHandleValue vp, bool *done)
         return false;
 
     InvokeArgs args(cx_);
-    if (!args.init(1))
+    if (!args.init(0))
         return false;
     args.setCallee(method);
     args.setThis(ObjectValue(*iterator));
-    args[0].setUndefined();
     if (!Invoke(cx_, args))
         return false;
 
@@ -178,14 +168,9 @@ ForOfIterator::materializeArrayIterator()
 {
     MOZ_ASSERT(index != NOT_ARRAY);
 
-    const char *nameString = "ArrayValuesAt";
-
-    RootedAtom name(cx_, Atomize(cx_, nameString, strlen(nameString)));
-    if (!name)
-        return false;
-
+    HandlePropertyName name = cx_->names().ArrayValuesAt;
     RootedValue val(cx_);
-    if (!cx_->global()->getSelfHostedFunction(cx_, name, name, 1, &val))
+    if (!GlobalObject::getSelfHostedFunction(cx_, cx_->global(), name, name, 1, &val))
         return false;
 
     InvokeArgs args(cx_);

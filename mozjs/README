@@ -1,8 +1,8 @@
-This directory contains SpiderMonkey 39.
+This directory contains SpiderMonkey 46.
 
-This release is based on a revision of Mozilla 39:
+This release is based on a revision of Mozilla 46:
   http://hg.mozilla.org/releases/
 The changes in the patches/ directory were applied.
 
-MDN hosts the latest SpiderMonkey 39 release notes:
-  https://developer.mozilla.org/en-US/docs/SpiderMonkey/39
+MDN hosts the latest SpiderMonkey 46 release notes:
+  https://developer.mozilla.org/en-US/docs/SpiderMonkey/46

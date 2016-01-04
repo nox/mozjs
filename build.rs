@@ -15,7 +15,7 @@ fn main() {
         .status()
         .unwrap();
     assert!(result.success());
-    println!("cargo:rustc-link-search=native={}/dist/lib", out_dir);
+    println!("cargo:rustc-link-search=native={}/js/src", out_dir);
     if target.contains("windows") {
         // On Windows, because dynamic libs and static libs end up
         // with different symbols for the import, we have to build

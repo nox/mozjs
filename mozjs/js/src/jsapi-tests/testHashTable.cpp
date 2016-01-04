@@ -53,7 +53,7 @@ struct LowToHighWithRemoval
 };
 
 static bool
-MapsAreEqual(IntMap &am, IntMap &bm)
+MapsAreEqual(IntMap& am, IntMap& bm)
 {
     bool equal = true;
     if (am.count() != bm.count()) {
@@ -76,7 +76,7 @@ MapsAreEqual(IntMap &am, IntMap &bm)
 }
 
 static bool
-SetsAreEqual(IntSet &am, IntSet &bm)
+SetsAreEqual(IntSet& am, IntSet& bm)
 {
     bool equal = true;
     if (am.count() != bm.count()) {
@@ -99,7 +99,7 @@ SetsAreEqual(IntSet &am, IntSet &bm)
 }
 
 static bool
-AddLowKeys(IntMap *am, IntMap *bm, int seed)
+AddLowKeys(IntMap* am, IntMap* bm, int seed)
 {
     size_t i = 0;
     srand(seed);
@@ -108,8 +108,9 @@ AddLowKeys(IntMap *am, IntMap *bm, int seed)
         if (!am->has(n)) {
             if (bm->has(n))
                 return false;
-            am->putNew(n, n);
-            bm->putNew(n, n);
+
+            if (!am->putNew(n, n) || !bm->putNew(n, n))
+                return false;
             i++;
         }
     }
@@ -117,7 +118,7 @@ AddLowKeys(IntMap *am, IntMap *bm, int seed)
 }
 
 static bool
-AddLowKeys(IntSet *as, IntSet *bs, int seed)
+AddLowKeys(IntSet* as, IntSet* bs, int seed)
 {
     size_t i = 0;
     srand(seed);
@@ -126,8 +127,8 @@ AddLowKeys(IntSet *as, IntSet *bs, int seed)
         if (!as->has(n)) {
             if (bs->has(n))
                 return false;
-            as->putNew(n);
-            bs->putNew(n);
+            if (!as->putNew(n) || !bs->putNew(n))
+                return false;
             i++;
         }
     }
@@ -136,9 +137,10 @@ AddLowKeys(IntSet *as, IntSet *bs, int seed)
 
 template <class NewKeyFunction>
 static bool
-SlowRekey(IntMap *m) {
+SlowRekey(IntMap* m) {
     IntMap tmp;
-    tmp.init();
+    if (!tmp.init())
+        return false;
 
     for (IntMap::Range r = m->all(); !r.empty(); r.popFront()) {
         if (NewKeyFunction::shouldBeRemoved(r.front().key()))
@@ -146,12 +148,14 @@ SlowRekey(IntMap *m) {
         uint32_t hi = NewKeyFunction::rekey(r.front().key());
         if (tmp.has(hi))
             return false;
-        tmp.putNew(hi, r.front().value());
+        if (!tmp.putNew(hi, r.front().value()))
+            return false;
     }
 
     m->clear();
     for (IntMap::Range r = tmp.all(); !r.empty(); r.popFront()) {
-        m->putNew(r.front().key(), r.front().value());
+        if (!m->putNew(r.front().key(), r.front().value()))
+            return false;
     }
 
     return true;
@@ -159,9 +163,10 @@ SlowRekey(IntMap *m) {
 
 template <class NewKeyFunction>
 static bool
-SlowRekey(IntSet *s) {
+SlowRekey(IntSet* s) {
     IntSet tmp;
-    tmp.init();
+    if (!tmp.init())
+        return false;
 
     for (IntSet::Range r = s->all(); !r.empty(); r.popFront()) {
         if (NewKeyFunction::shouldBeRemoved(r.front()))
@@ -169,12 +174,14 @@ SlowRekey(IntSet *s) {
         uint32_t hi = NewKeyFunction::rekey(r.front());
         if (tmp.has(hi))
             return false;
-        tmp.putNew(hi);
+        if (!tmp.putNew(hi))
+            return false;
     }
 
     s->clear();
     for (IntSet::Range r = tmp.all(); !r.empty(); r.popFront()) {
-        s->putNew(r.front());
+        if (!s->putNew(r.front()))
+            return false;
     }
 
     return true;
@@ -183,8 +190,8 @@ SlowRekey(IntSet *s) {
 BEGIN_TEST(testHashRekeyManual)
 {
     IntMap am, bm;
-    am.init();
-    bm.init();
+    CHECK(am.init());
+    CHECK(bm.init());
     for (size_t i = 0; i < TestIterations; ++i) {
 #ifdef FUZZ
         fprintf(stderr, "map1: %lu\n", i);
@@ -205,8 +212,8 @@ BEGIN_TEST(testHashRekeyManual)
     }
 
     IntSet as, bs;
-    as.init();
-    bs.init();
+    CHECK(as.init());
+    CHECK(bs.init());
     for (size_t i = 0; i < TestIterations; ++i) {
 #ifdef FUZZ
         fprintf(stderr, "set1: %lu\n", i);
@@ -233,8 +240,8 @@ END_TEST(testHashRekeyManual)
 BEGIN_TEST(testHashRekeyManualRemoval)
 {
     IntMap am, bm;
-    am.init();
-    bm.init();
+    CHECK(am.init());
+    CHECK(bm.init());
     for (size_t i = 0; i < TestIterations; ++i) {
 #ifdef FUZZ
         fprintf(stderr, "map2: %lu\n", i);
@@ -259,8 +266,8 @@ BEGIN_TEST(testHashRekeyManualRemoval)
     }
 
     IntSet as, bs;
-    as.init();
-    bs.init();
+    CHECK(as.init());
+    CHECK(bs.init());
     for (size_t i = 0; i < TestIterations; ++i) {
 #ifdef FUZZ
         fprintf(stderr, "set1: %lu\n", i);
@@ -294,11 +301,11 @@ struct MoveOnlyType {
 
     explicit MoveOnlyType(uint32_t val) : val(val) { }
 
-    MoveOnlyType(MoveOnlyType &&rhs) {
+    MoveOnlyType(MoveOnlyType&& rhs) {
         val = rhs.val;
     }
 
-    MoveOnlyType &operator=(MoveOnlyType &&rhs) {
+    MoveOnlyType& operator=(MoveOnlyType&& rhs) {
         MOZ_ASSERT(&rhs != this);
         this->~MoveOnlyType();
         new(this) MoveOnlyType(mozilla::Move(rhs));
@@ -308,18 +315,18 @@ struct MoveOnlyType {
     struct HashPolicy {
         typedef MoveOnlyType Lookup;
 
-        static js::HashNumber hash(const Lookup &lookup) {
+        static js::HashNumber hash(const Lookup& lookup) {
             return lookup.val;
         }
 
-        static bool match(const MoveOnlyType &existing, const Lookup &lookup) {
+        static bool match(const MoveOnlyType& existing, const Lookup& lookup) {
             return existing.val == lookup.val;
         }
     };
 
   private:
-    MoveOnlyType(const MoveOnlyType &) = delete;
-    MoveOnlyType& operator=(const MoveOnlyType &) = delete;
+    MoveOnlyType(const MoveOnlyType&) = delete;
+    MoveOnlyType& operator=(const MoveOnlyType&) = delete;
 };
 
 BEGIN_TEST(testHashSetOfMoveOnlyType)
@@ -327,11 +334,11 @@ BEGIN_TEST(testHashSetOfMoveOnlyType)
     typedef js::HashSet<MoveOnlyType, MoveOnlyType::HashPolicy, js::SystemAllocPolicy> Set;
 
     Set set;
-    set.init();
+    CHECK(set.init());
 
     MoveOnlyType a(1);
 
-    set.put(mozilla::Move(a)); // This shouldn't generate a compiler error.
+    CHECK(set.put(mozilla::Move(a))); // This shouldn't generate a compiler error.
 
     return true;
 }

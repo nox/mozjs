@@ -7,7 +7,7 @@ function RegExpFlagsGetter() {
     // Steps 1-2.
     var R = this;
     if (!IsObject(R))
-        ThrowError(JSMSG_NOT_NONNULL_OBJECT, R === null ? "null" : typeof R);
+        ThrowTypeError(JSMSG_NOT_NONNULL_OBJECT, R === null ? "null" : typeof R);
 
     // Step 3.
     var result = "";
@@ -25,9 +25,8 @@ function RegExpFlagsGetter() {
         result += "m";
 
     // Steps 13-15.
-    // TODO: Uncomment these steps when bug 1135377 is fixed.
-    // if (R.unicode)
-    //     result += "u";
+    if (R.unicode)
+         result += "u";
 
     // Steps 16-18.
     if (R.sticky)
@@ -43,7 +42,7 @@ function RegExpToString()
     // Steps 1-2.
     var R = this;
     if (!IsObject(R))
-        ThrowError(JSMSG_NOT_NONNULL_OBJECT, R === null ? "null" : typeof R);
+        ThrowTypeError(JSMSG_NOT_NONNULL_OBJECT, R === null ? "null" : typeof R);
 
     // Steps 3-4.
     var pattern = R.source;

@@ -5,6 +5,8 @@
 #include "jsfriendapi.h"
 #include "jsapi-tests/tests.h"
 
+using mozilla::UniquePtr;
+
 static bool sErrorReportMuted = false;
 BEGIN_TEST(testMutedErrors)
 {
@@ -36,16 +38,16 @@ BEGIN_TEST(testMutedErrors)
 }
 
 static void
-ErrorReporter(JSContext *cx, const char *message, JSErrorReport *report)
+ErrorReporter(JSContext* cx, const char* message, JSErrorReport* report)
 {
     sErrorReportMuted = report->isMuted;
 }
 
 bool
-eval(const char *asciiChars, bool mutedErrors, JS::MutableHandleValue rval)
+eval(const char* asciiChars, bool mutedErrors, JS::MutableHandleValue rval)
 {
     size_t len = strlen(asciiChars);
-    char16_t *chars = new char16_t[len+1];
+    UniquePtr<char16_t[]> chars(new char16_t[len+1]);
     for (size_t i = 0; i < len; ++i)
         chars[i] = asciiChars[i];
     chars[len] = 0;
@@ -60,14 +62,11 @@ eval(const char *asciiChars, bool mutedErrors, JS::MutableHandleValue rval)
     options.setMutedErrors(mutedErrors)
            .setFileAndLine("", 0);
 
-    bool ok = JS::Evaluate(cx, options, chars, len, rval);
-
-    delete[] chars;
-    return ok;
+    return JS::Evaluate(cx, options, chars.get(), len, rval);
 }
 
 bool
-testOuter(const char *asciiChars)
+testOuter(const char* asciiChars)
 {
     CHECK(testInner(asciiChars, false));
     CHECK(testInner(asciiChars, true));
@@ -75,20 +74,20 @@ testOuter(const char *asciiChars)
 }
 
 bool
-testInner(const char *asciiChars, bool mutedErrors)
+testInner(const char* asciiChars, bool mutedErrors)
 {
     JS::RootedValue rval(cx);
     CHECK(eval(asciiChars, mutedErrors, &rval));
 
     JS::RootedFunction fun(cx, &rval.toObject().as<JSFunction>());
-    JSScript *script = JS_GetFunctionScript(cx, fun);
+    JSScript* script = JS_GetFunctionScript(cx, fun);
     CHECK(JS_ScriptHasMutedErrors(script) == mutedErrors);
 
     return true;
 }
 
 bool
-testError(const char *asciiChars)
+testError(const char* asciiChars)
 {
     JS::RootedValue rval(cx);
     CHECK(!eval(asciiChars, true, &rval));
