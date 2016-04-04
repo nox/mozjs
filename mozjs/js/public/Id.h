@@ -28,6 +28,7 @@
 #include "js/Utility.h"
 
 namespace js {
+/** <div rustbindgen hide></div> */
 template <typename T> struct DefaultHasher;
 } // namespace js
 
@@ -172,6 +173,7 @@ extern JS_PUBLIC_DATA(const JS::HandleId) JSID_EMPTYHANDLE;
 
 namespace js {
 
+/** <div rustbindgen hide></div> */
 template <>
 struct DefaultHasher<jsid>
 {
