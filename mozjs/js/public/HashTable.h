@@ -37,21 +37,25 @@ namespace detail {
 
 using Generation = mozilla::Opaque<uint64_t>;
 
-// A JS-friendly, STL-like container providing a hash-based map from keys to
-// values. In particular, HashMap calls constructors and destructors of all
-// objects added so non-PODs may be used safely.
-//
-// Key/Value requirements:
-//  - movable, destructible, assignable
-// HashPolicy requirements:
-//  - see Hash Policy section below
-// AllocPolicy:
-//  - see jsalloc.h
-//
-// Note:
-// - HashMap is not reentrant: Key/Value/HashPolicy/AllocPolicy members
-//   called by HashMap must not call back into the same HashMap object.
-// - Due to the lack of exception handling, the user must call |init()|.
+/**
+ * A JS-friendly, STL-like container providing a hash-based map from keys to
+ * values. In particular, HashMap calls constructors and destructors of all
+ * objects added so non-PODs may be used safely.
+ *
+ * Key/Value requirements:
+ *  - movable, destructible, assignable
+ * HashPolicy requirements:
+ *  - see Hash Policy section below
+ * AllocPolicy:
+ *  - see jsalloc.h
+ *
+ * Note:
+ * - HashMap is not reentrant: Key/Value/HashPolicy/AllocPolicy members
+ *   called by HashMap must not call back into the same HashMap object.
+ * - Due to the lack of exception handling, the user must call |init()|.
+ *
+ * <div rustbindgen opaque></div>
+ */
 template <class Key,
           class Value,
           class HashPolicy = DefaultHasher<Key>,
@@ -294,21 +298,25 @@ class HashMap
 
 /*****************************************************************************/
 
-// A JS-friendly, STL-like container providing a hash-based set of values. In
-// particular, HashSet calls constructors and destructors of all objects added
-// so non-PODs may be used safely.
-//
-// T requirements:
-//  - movable, destructible, assignable
-// HashPolicy requirements:
-//  - see Hash Policy section below
-// AllocPolicy:
-//  - see jsalloc.h
-//
-// Note:
-// - HashSet is not reentrant: T/HashPolicy/AllocPolicy members called by
-//   HashSet must not call back into the same HashSet object.
-// - Due to the lack of exception handling, the user must call |init()|.
+/**
+ * A JS-friendly, STL-like container providing a hash-based set of values. In
+ * particular, HashSet calls constructors and destructors of all objects added
+ * so non-PODs may be used safely.
+ *
+ * T requirements:
+ *  - movable, destructible, assignable
+ * HashPolicy requirements:
+ *  - see Hash Policy section below
+ * AllocPolicy:
+ *  - see jsalloc.h
+ *
+ * Note:
+ * - HashSet is not reentrant: T/HashPolicy/AllocPolicy members called by
+ *   HashSet must not call back into the same HashSet object.
+ * - Due to the lack of exception handling, the user must call |init()|.
+ *
+ * <div rustbindgen opaque></div>
+ */
 template <class T,
           class HashPolicy = DefaultHasher<T>,
           class AllocPolicy = TempAllocPolicy>
@@ -738,6 +746,7 @@ namespace detail {
 template <class T, class HashPolicy, class AllocPolicy>
 class HashTable;
 
+/** <div rustbindgen hide></div> */
 template <class T>
 class HashTableEntry
 {
@@ -803,6 +812,7 @@ class HashTableEntry
     }
 };
 
+/** <div rustbindgen opaque></div> */
 template <class T, class HashPolicy, class AllocPolicy>
 class HashTable : private AllocPolicy
 {
