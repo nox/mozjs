@@ -21,6 +21,7 @@ class TempAllocPolicy;
 
 namespace detail {
 
+/** <div rustbindgen hide></div> */
 template <typename T>
 struct TypeIsGCThing : mozilla::FalseType
 {};
