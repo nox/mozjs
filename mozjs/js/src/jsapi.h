@@ -344,6 +344,7 @@ class MOZ_RAII AutoHashMapRooter : protected AutoGCRooter
     MOZ_DECL_USE_GUARD_OBJECT_NOTIFIER
 };
 
+/** <div rustbindgen hide></div> */
 template<class T>
 class MOZ_RAII AutoHashSetRooter : protected AutoGCRooter
 {
