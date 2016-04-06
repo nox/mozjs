@@ -223,6 +223,7 @@ using ValueVector = js::GCVector<JS::Value>;
 using IdVector = js::GCVector<jsid>;
 using ScriptVector = js::GCVector<JSScript*>;
 
+/// <div rustbindgen hide></div>
 template<class Key, class Value>
 class MOZ_RAII AutoHashMapRooter : protected AutoGCRooter
 {
