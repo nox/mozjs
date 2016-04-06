@@ -214,6 +214,8 @@ AssertGCThingIsNotAnObjectSubclass(js::gc::Cell* cell) {}
  * C/C++ stack must use Rooted/Handle/MutableHandle instead.
  *
  * Type T must be one of: JS::Value, jsid, JSObject*, JSString*, JSScript*
+ *
+ * <div rustbindgen hide></div>
  */
 template <typename T>
 class Heap : public js::HeapBase<T>
